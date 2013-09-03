@@ -10,13 +10,17 @@ module.exports = class ClusterMaster
     return unless require('cluster').isMaster
     @run options
 
+  log: (str, args...) ->
+    date = new Date().toISOString()
+    console.log "#{date}: #{str}", args...
+
   constructor: (@options = {}) ->
     @cluster = @options.cluster ? require 'cluster'
     @options.workers ?= CPUS_COUNT
     @options.reloadTimeout ?= 5000
 
   spawn: (options = {}) ->
-    console.log 'Cluster: start forking.'
+    @log 'Cluster: start forking.'
     while @workersCount < @options.workers
       worker = @cluster.fork()
       worker.reanimate = options.reanimate ? true
@@ -53,24 +57,24 @@ module.exports = class ClusterMaster
     do reload_next = =>
       worker_id = worker_ids.shift()
       unless worker_id?
-        console.log "Reload: all done"
+        @log "Reload: all done"
         return callback?()
       unless worker = @cluster.workers[worker_id]
-        console.log "Reload: missing worker ##{worker_id}"
+        @log "Reload: missing worker ##{worker_id}"
         return reload_next()
-      console.log "Reload: forking new worker."
-      new_worker = @cluster.fork().on 'listening', ->
-        console.log "Reload: successful fork; disconnecting old worker ##{worker_id}."
+      @log "Reload: forking new worker."
+      new_worker = @cluster.fork().on 'listening', =>
+        @log "Reload: successful fork; disconnecting old worker ##{worker_id}."
         clearTimeout timer_fork_fail
         new_worker.reanimate = worker.reanimate
         reload_next()
         worker.reanimate = false
         worker.on 'disconnect', =>
-          console.log "Reload: old worker ##{worker_id} disconnected, killing."
+          @log "Reload: old worker ##{worker_id} disconnected, killing."
           worker.kill()
         worker.disconnect()
-      timer_fork_fail = setTimeout ->
-        console.log "Reload: fork failed, killing it."
+      timer_fork_fail = setTimeout =>
+        @log "Reload: fork failed, killing it."
         new_worker.kill?()
         callback? new Error 'Fork failed'
       , @options.reloadTimeout
@@ -90,17 +94,18 @@ module.exports = class ClusterMaster
     @writePid()
 
     @cluster.on 'exit', (deadWorker, code, signal) =>
-      console.log "Cluster: Worker #{deadWorker.process.pid} died. Reanimate: #{deadWorker.reanimate}."
+      @log "Cluster: Worker #{deadWorker.process.pid} died. Reanimate: #{deadWorker.reanimate}."
       return unless deadWorker.reanimate
       worker = @cluster.fork()
       worker.reanimate = deadWorker.reanimate
-      console.log "Cluster: Worker #{deadWorker.process.pid} reanimated as #{worker.process.pid}."
+      @log "Cluster: Worker #{deadWorker.process.pid} reanimated as #{worker.process.pid}."
 
-    process.on 'close', =>
-      console.log 'Cluster: exiting, closing workers...'
+    process.on 'exit', =>
+      @log 'Cluster: exiting, closing workers...'
       @closeAll => @clearPid()
 
-    process.on 'SIGHUP', =>
-      @reloadAll()
+    process.on 'SIGINT', => process.exit()
+
+    process.on 'SIGHUP', => @reloadAll()
 
     @

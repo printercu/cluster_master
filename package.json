@@ -1,6 +1,6 @@
 {
   "name": "cluster_master",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Easy cluster management + zero downtime deploys & reloads",
   "main": "index.coffee",
   "directories": {
